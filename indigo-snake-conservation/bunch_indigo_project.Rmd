@@ -1,0 +1,227 @@
+---
+title: Predicting Eastern Indigo Snake Occurrences in Florida Using Construction Permitting
+  Data
+author: "Jonathan Bunch"
+date: "8/6/2020"
+output:
+  pdf_document: default
+  html_document: default
+bibliography: bunch_indigo_bibliography.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(readxl)
+library(plyr)
+library(stats)
+library(gvlma)
+```
+
+# Introduction
+The conservation of threatened species is an important, albeit daunting, endeavor.
+Unfortunately, many ecologically important species are overlooked by the general 
+public simply because they are not considered appealing.  Snake conservation is 
+particularly difficult to promote, due to the common fears and misconceptions 
+associated with them.  The Eastern Indigo snake (Drymarchon couperi) is a large, 
+non-venomous snake native to the south-eastern United States.  This species has 
+great value as a predator in the ecosystems it inhabits, feeding on many common 
+pest animals.  This species also has the unique ability to predate venomous snake 
+species, helping to control the population of species that are potentially dangerous 
+to humans.  
+
+The Eastern Indigo snake is currently listed as “threatened” by the US Fish and 
+Wildlife Service.  The primary cause for declining populations is thought to be 
+habitat destruction and fragmentation.  These snakes are known to co-occupy the 
+borrows of gopher tortoises (Gopherus polyphemus), whose population has also sharply 
+declined, adding further difficulties for the species.  While both of these species 
+are legally protected, it is rumored that loopholes are commonly exploited by real-
+estate developers to bypass mandatory reporting and damage mitigation processes.
+
+The goal of this project was to explore the impact of new construction projects on
+the observed occurrences of this species in Florida.  Observed occurrences (sightings) 
+of this species are documented and verified by several scientific organizations and 
+made available as an organized data set.  New construction data were collected from
+the U.S. Census Building Permits Survey.
+
+
+# Problem Statement
+Habitat destruction and fragmentation is a leading cause of species decline, and
+human habitation is a leading cause of habitat destruction and fragmentation.  
+Historically, humans simply did not understand the impact that they were having on
+their environment.  Over time we have become increasingly aware of the profound
+impact our actions have on the natural world, and the importance of taking those
+impacts into consideration.  The more clearly and specifically we can quantify our
+most harmful practices, the better positioned we will be to change industry standards
+and create effective conservation legislation.  This project will explore different
+types of residential housing, and different measures of quantity of new housing,
+to search for specific indicators of species decline.
+
+# Methods
+Two data sets were collected and prepared for this project: an observed occurrences
+of rare species data set and a yearly permit survey data set.  Unnecessary and irrelevant
+variables were removed and the data sets were conditionally restructured to match
+the desired species, time frame, and location.  These decisions were based on several
+considerations, including missing data and number of observations.  Once the basic
+structure was established I began exploratory analysis.
+
+```{r}
+#### Occurrences Data Preliminary Preparation
+# Import data and create subsets based on values of relevant variables.
+occurrences <- read.delim("/Users/jonathanbunch/Documents/dsc520/final-project/data/drymarchon_occ/occurrence.txt")
+occ_sub1 <- subset(occurrences, select = c(basisOfRecord, year, stateProvince, 
+                                           specificEpithet, issue))
+occ_sub2 <- subset(occ_sub1, stateProvince == "Florida" & specificEpithet == "couperi" 
+                   & year >= 1970 & basisOfRecord == "HUMAN_OBSERVATION")
+# Plot to see the distribution of sightings.
+ggplot(data = occ_sub2, aes(x = year)) + geom_histogram(bins = 50) + 
+  ggtitle("Occurrence Data Set Histogram") + xlab("Year") + ylab("Count")
+
+#### Restructure the Occurrences Data to Represent Sightings per Year
+# Create a new data table that counts the sightings per year.
+occ_count <- as.data.frame(table(occ_sub2[, "year"]))
+# This method converted the year to a factor. This will convert it back to a number.
+occ_count$Var1 <- as.numeric(as.character(occ_count$Var1))
+# The year 2015 had no occurrences, so it was not included in our count data frame.
+# We need to add it to the data frame with a zero value for frequency.
+occ_count <- rbind(occ_count, c(2015, 0))
+# The order() function will move the new row to the correct chronological position.
+occ_count <- occ_count[order(occ_count$Var1), ]
+# Plot to make sure the "sightings per year" data frame matches the histogram.
+ggplot(data = occ_count, aes(x = Var1, y = Freq)) + geom_col() + 
+  ggtitle("Yearly Observed Occurrences") + xlab("Year") + ylab("Occurrences")
+
+#### Permitting Data Preliminary Preparation
+# Import data and create subsets based on values of relevant variables.
+permits <- read_xlsx("/Users/jonathanbunch/Documents/dsc520/final-project/data/fl_permits.xlsx")
+permits$year <- as.integer(permits$year)
+permits_sub1 <- subset(permits, select = -c(`1_unit_buildings`, `2_unit_buildings`,
+                                            `3_and_4_unit_buildings`, `5_plus_unit_buildings`,
+                                            total_buildings))
+permits_sub2 <- subset(permits_sub1, year >= 1970)
+permits_sub2$year <- as.integer(permits_sub2$year)
+# These final two variables were selected based on their correlation with the occurrences data.
+permits_sub3 <- subset(permits_sub2, select = c(total_construction_valuation, `1_unit_valuation`))
+```
+
+Analysis began with trial and error experimentation through restructuring, visualization, 
+and correlation testing.  These tests lead to further exclusions of variables that
+did not appear to have statistical significance in this case.  
+
+```{r}
+cor(x = occ_count$Freq, y = permits_sub2)
+```
+
+Due to the low sample size of the occurrences data set, I chose to aggregate the 
+yearly sighting count into five year blocks.  The two most promising variables from 
+the permitting data set were aggregated into the same five year blocks and combined 
+with the occurrences data to produce my final data set.
+
+```{r}
+#### Aggregating Yearly Values into Five Year Totals.
+# This function returns the sum of each five row block for a given variable.
+blocks_func <- function(x) {
+  return(c(sum(x[1:5]), sum(x[6:10]), sum(x[11:15]), sum(x[16:20]), sum(x[21:25]), 
+           sum(x[26:30]), sum(x[31:35]), sum(x[36:40]), sum(x[41:45]), sum(x[46:50])))
+}
+# Labels for each block of years.
+block_labels <- c("1970-1974", "1975-1979", "1980-1984", "1985-1989", "1990-1994",
+                 "1995-1999", "2000-2004", "2005-2009", "2010-2014", "2015-2019")
+# New data frame with labels and sums of values for each five year period.
+blocks_df <- data.frame(years = block_labels, occurrences = blocks_func(occ_count$Freq),
+                        total_const_valuation = blocks_func(permits_sub3$total_construction_valuation),
+                        one_unit_valuation = blocks_func(permits_sub3$`1_unit_valuation`))
+# See what the five year block data frame looks like.
+head(blocks_df)
+# Correlation matrix.
+cor(blocks_df[,-1])
+```
+
+Once the data were prepared, I performed simple and multiple regression to create
+models of observed occurrences based on the two permitting variables.  This resulted
+in three models: one for each predictor variable plus one that included both predictor
+variables.  I then compared the three models to determine which, if any, was most
+effective.
+
+```{r}
+# Create regression models for each predictor variable, as well as the combination of both.
+tot_val_lm <- lm(occurrences ~ total_const_valuation, data = blocks_df)
+one_unit_val_lm <- lm(occurrences ~ one_unit_valuation, data = blocks_df)
+multi_lm <- lm(occurrences ~ total_const_valuation + one_unit_valuation, data = blocks_df)
+# Plot the data with regression lines.
+ggplot(data = blocks_df, aes(y = occurrences)) + geom_point(aes(x = total_const_valuation, color = "Total Valuation")) + 
+  geom_smooth(aes(x = total_const_valuation, color="Total Valuation"), method = "lm", se=FALSE) +
+  geom_point(aes(x = one_unit_valuation, color = "One Unit Valuation")) +
+  geom_smooth(aes(x = one_unit_valuation, color="One Unit Valuation"), method = "lm", se=FALSE) +
+  ggtitle("Occurrences vs. Valuation Data") + xlab("Valuation") + ylab("Occurrences") + 
+  labs(color = "Legend") + scale_color_manual(values = c("Total Valuation" = "black", "One Unit Valuation" = "blue"))
+```
+
+# Analysis
+I began by examining the summary output for the three regression models.  We can
+see from the summary that using the total construction valuation as a predictor
+creates a fairly weak model, with an R-squared value of about 0.375 and a significance
+value slightly above 0.05.  The model using one unit construction valuation as the
+predictor variable is slightly better, with an R-squared value of about 0.422 and
+a significance value slightly below 0.05.  The model using both predictor variables
+has a better fit than the other models, with an R-squared value of about 0.651, but
+the significance values are slightly above the 0.05 level.
+
+Next, I used the gvlma library to assess the model assumptions.  All models passed
+the assessments, indicating that the models do not violate any of the basic assumptions
+required for an effective regression model.  Next, I used the "deletion" function from
+the same library to calculate deletion statistics for each model.  This calculation
+indicates unusual values that may be having an undue influence on the model.  The
+results indicate that deletion of the third row of data could improve model performance.
+However, there is no obvious justification to remove that observation and doing
+so may be manipulative.
+
+```{r}
+# View summaries of the three models.
+summary(tot_val_lm)
+summary(one_unit_val_lm)
+summary(multi_lm)
+# Assess model assumptions.
+gvmodel_tot <- gvlma(tot_val_lm)
+summary(gvmodel_tot)
+gvmodel_one <- gvlma(one_unit_val_lm)
+summary(gvmodel_one)
+gvmodel_multi <- gvlma(multi_lm)
+summary(gvmodel_multi)
+# Deletion statistics for each model.
+gvmodel_tot_del <- deletion.gvlma(gvmodel_tot)
+summary(gvmodel_tot_del)
+gvmodel_one_del <- deletion.gvlma(gvmodel_one)
+summary(gvmodel_one_del)
+gvmodel_multi_del <- deletion.gvlma(gvmodel_multi)
+summary(gvmodel_multi_del)
+```
+
+# Implications
+The results of this modeling indicate that a multiple regression model using yearly
+total- and one-unit construction valuation as predictor variables could predict
+the yearly observational occurrences of the Eastern Indigo snake in Florida.  The
+R-squared value indicates that these variables could theoretically account for about
+55% of the variation in yearly observational occurrences when applied as a general
+model.
+
+# Limitations
+The most obvious limitation of this analysis is the very small sample size of the
+observational occurrences data set.  Five year time blocks had as little as 12
+occurrences, and aggregating the data this way resulted in only 10 observations.
+The data itself has many potential issues as well.  It is based on human observation
+and identification of species, often by non-experts.
+
+# Conclusion
+The data available regarding the Eastern Indigo snake is, not surprisingly, very
+limited.  Species sighting data is relatively laborious to create, especially if
+the curators of the data are attempting to verify the species identification and
+other pertinent information.  After removing all of the observations that had issues
+or were otherwise not usable, I found that the sample size had fallen well below
+what I would consider sufficient for meaningful analysis.  That being said, there
+were some statistically significance patterns between species occurrences and construction
+permitting data, suggesting that there could be legitimacy to my hypothesis. This
+was a very interesting and educational project, and I hope to continue this avenue
+of research in the future.
+
+# References
