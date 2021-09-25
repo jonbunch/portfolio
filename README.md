@@ -1,2 +1,2 @@
-# portfolio
-Portfolio of Recent Projects
+# Jonathan Bunch--Portfolio of Recent Projects
+
