@@ -8,8 +8,3 @@ Welcome! I invite you to explore this repository of sample work from some of my 
 - Developing efficient, clear, and well-documented code.
 - Implementing industry standard analysis and modeling techniques.
 - Creating publication-quality visualizations and presentations.
-
-### Project Snapshots
-
-![Screenshot1](https://raw.githubusercontent.com/jonbunch/jonbunch.github.io/main/images/arduino1.jpg)
-
